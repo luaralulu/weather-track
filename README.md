@@ -1,46 +1,40 @@
-# Weather Tracker for Newcastle, AU
+# Weather Tracker
 
-This script fetches and displays historical weather data for Newcastle, Australia, divided into morning, afternoon, and evening periods.
+This project retrieves weather data for Newcastle, Australia, using the [WeatherAPI.com](https://www.weatherapi.com/) API. It calculates average weather conditions for the previous day, divided into morning, afternoon, and evening, and stores the data in a Supabase database.
 
 ## Features
 
-- Fetches historical weather data for the previous day
-- Divides weather information into three periods (morning, afternoon, evening)
-- Shows temperature, feels-like temperature, humidity, wind speed, and weather conditions
-- Uses OpenWeatherMap API for reliable weather data
-- Implements proper error handling and security best practices
+- Fetches historical weather data from WeatherAPI.com.
+- Calculates average temperature, humidity, wind speed, and weather conditions for different periods of the day.
+- Stores the data in a Supabase database, preventing duplicate entries.
 
 ## Setup
 
-1. Install the required dependencies:
-
+1. Clone the repository.
+2. Install the required dependencies:
    ```bash
    pip install -r requirements.txt
    ```
-
-2. Sign up for a free API key at [OpenWeatherMap](https://openweathermap.org/api)
-
-3. Create a `.env` file in the project root with your API key:
+3. Create a `.env` file with the following variables:
    ```
-   OPENWEATHER_API_KEY=your_api_key_here
+   WEATHER_API_KEY=your_weather_api_key
+   SUPABASE_URL=your_supabase_url
+   SUPABASE_SERVICE_ROLE_KEY=your_supabase_service_role_key
+   SUPABASE_USER_EMAIL=your_supabase_user_email
+   SUPABASE_USER_PASSWORD=your_supabase_user_password
+   ```
+4. Run the script:
+   ```bash
+   python weather_tracker.py
    ```
 
-## Usage
+## Dependencies
 
-Run the script:
+- Python 3.9+
+- `requests`
+- `python-dotenv`
+- `supabase`
 
-```bash
-python weather_tracker.py
-```
+## License
 
-The script will display a weather report for the previous day, showing:
-
-- Average temperature
-- "Feels like" temperature
-- Humidity percentage
-- Wind speed
-- Weather conditions
-
-## Note
-
-The free tier of OpenWeatherMap API has a limit of 60 calls per minute. The script makes one API call per run.
+This project is licensed under the MIT License.
