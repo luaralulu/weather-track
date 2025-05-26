@@ -7,13 +7,33 @@ from dotenv import load_dotenv
 import json
 from supabase import create_client, Client
 
-# Load environment variables
+# Load environment variables from .env file if it exists (for local development)
 load_dotenv()
+
+# Get environment variables (works for both local .env and GitHub Actions secrets)
+WEATHER_API_KEY = os.getenv('WEATHER_API_KEY')
+SUPABASE_URL = os.getenv('SUPABASE_URL')
+SUPABASE_SERVICE_ROLE_KEY = os.getenv('SUPABASE_SERVICE_ROLE_KEY')
+SUPABASE_USER_EMAIL = os.getenv('SUPABASE_USER_EMAIL')
+SUPABASE_USER_PASSWORD = os.getenv('SUPABASE_USER_PASSWORD')
+
+# Validate required environment variables
+required_vars = {
+    'WEATHER_API_KEY': WEATHER_API_KEY,
+    'SUPABASE_URL': SUPABASE_URL,
+    'SUPABASE_SERVICE_ROLE_KEY': SUPABASE_SERVICE_ROLE_KEY,
+    'SUPABASE_USER_EMAIL': SUPABASE_USER_EMAIL,
+    'SUPABASE_USER_PASSWORD': SUPABASE_USER_PASSWORD
+}
+
+missing_vars = [var for var, value in required_vars.items() if not value]
+if missing_vars:
+    raise ValueError(f"Missing required environment variables: {', '.join(missing_vars)}")
 
 class WeatherTracker:
     def __init__(self):
         # Weather API setup
-        self.api_key = os.getenv('WEATHER_API_KEY')
+        self.api_key = WEATHER_API_KEY
         if not self.api_key:
             raise ValueError("WEATHER_API_KEY not found in environment variables")
         
@@ -24,10 +44,10 @@ class WeatherTracker:
         self.lon = 151.7783
 
         # Supabase setup
-        self.supabase_url = os.getenv('SUPABASE_URL')
-        self.supabase_key = os.getenv('SUPABASE_SERVICE_ROLE_KEY')
-        self.supabase_email = os.getenv('SUPABASE_USER_EMAIL')
-        self.supabase_password = os.getenv('SUPABASE_USER_PASSWORD')
+        self.supabase_url = SUPABASE_URL
+        self.supabase_key = SUPABASE_SERVICE_ROLE_KEY
+        self.supabase_email = SUPABASE_USER_EMAIL
+        self.supabase_password = SUPABASE_USER_PASSWORD
         
         if not all([self.supabase_url, self.supabase_key, self.supabase_email, self.supabase_password]):
             raise ValueError("Missing Supabase credentials in environment variables")
