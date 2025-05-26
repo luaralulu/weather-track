@@ -167,7 +167,9 @@ class WeatherTracker:
                 print(f"Weather data for {date.strftime('%Y-%m-%d')} already exists. Skipping insertion.")
                 return
 
+            print("Starting data insertion...")
             for period, data in period_averages.items():
+                print(f"Processing {period} data...")
                 weather_record = {
                     'date': date.strftime('%Y-%m-%d'),
                     'location': f"{self.city}, {self.country}",
@@ -180,6 +182,7 @@ class WeatherTracker:
                 }
                 
                 # Insert data into Supabase
+                print(f"Inserting {period} data into Supabase...")
                 result = self.supabase.table('weather_data').insert(weather_record).execute()
                 
                 if hasattr(result, 'error') and result.error:
@@ -189,6 +192,8 @@ class WeatherTracker:
                     
         except Exception as e:
             print(f"Error storing weather data: {e}")
+        finally:
+            print("Data storage process completed.")
 
     def print_weather_report(self, date, period_averages):
         """Print a formatted weather report."""
@@ -209,31 +214,39 @@ def main():
         yesterday = datetime.now() - timedelta(days=1)
         
         # Initialize weather tracker
+        print("Initializing WeatherTracker...")
         tracker = WeatherTracker()
         
         # Get historical weather data
+        print("Fetching historical weather data...")
         weather_data = tracker.get_historical_weather(yesterday)
         if not weather_data:
             print("Failed to fetch weather data")
             return
 
         # Analyze weather periods
+        print("Analyzing weather periods...")
         periods = tracker.analyze_weather_periods(weather_data)
         if not periods:
             print("Failed to analyze weather periods")
             return
 
         # Calculate averages
+        print("Calculating period averages...")
         period_averages = tracker.calculate_period_averages(periods)
         
         # Print report
         tracker.print_weather_report(yesterday, period_averages)
         
         # Store data in Supabase
+        print("Storing data in Supabase...")
         tracker.store_weather_data(yesterday, period_averages)
+        print("Script execution completed successfully.")
 
     except Exception as e:
         print(f"An error occurred: {e}")
+    finally:
+        print("Script finished running.")
 
 if __name__ == "__main__":
     main() 
