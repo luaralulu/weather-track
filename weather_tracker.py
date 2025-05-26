@@ -208,7 +208,18 @@ class WeatherTracker:
             print(f"Wind Speed: {data['avg_wind_speed']:.1f} km/h")
             print(f"Weather: {data['weather_condition']}")
 
+    def cleanup(self):
+        """Clean up resources and close connections."""
+        try:
+            if hasattr(self, 'supabase'):
+                # Sign out from Supabase
+                self.supabase.auth.sign_out()
+                print("Successfully signed out from Supabase")
+        except Exception as e:
+            print(f"Error during cleanup: {e}")
+
 def main():
+    tracker = None
     try:
         # Get yesterday's date
         yesterday = datetime.now() - timedelta(days=1)
@@ -246,6 +257,9 @@ def main():
     except Exception as e:
         print(f"An error occurred: {e}")
     finally:
+        if tracker:
+            print("Cleaning up resources...")
+            tracker.cleanup()
         print("Script finished running.")
 
 if __name__ == "__main__":
