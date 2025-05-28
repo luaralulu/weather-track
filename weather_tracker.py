@@ -6,6 +6,46 @@ from datetime import datetime, timedelta
 from dotenv import load_dotenv
 import json
 from supabase import create_client, Client
+import logging
+import re
+
+class SensitiveDataFilter(logging.Filter):
+    """Filter to remove sensitive information from log records."""
+    
+    def __init__(self):
+        super().__init__()
+        # Patterns to match and replace sensitive data
+        self.patterns = [
+            (r'https?://[^/]+\.supabase\.co', '[SUPABASE_URL]'),
+            (r'user_id=eq\.[a-f0-9-]+', 'user_id=eq.[REDACTED]'),
+            (r'[a-f0-9-]{36}', '[UUID]'),  # Matches UUIDs
+            (r'Bearer [A-Za-z0-9-_=]+\.[A-Za-z0-9-_=]+\.?[A-Za-z0-9-_.+/=]*', 'Bearer [REDACTED]'),
+            (r'apikey=[A-Za-z0-9-_=]+', 'apikey=[REDACTED]'),
+        ]
+
+    def filter(self, record):
+        if isinstance(record.msg, str):
+            for pattern, replacement in self.patterns:
+                record.msg = re.sub(pattern, replacement, record.msg)
+        return True
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s'
+)
+
+# Disable HTTP request logging from urllib3 and requests
+logging.getLogger('urllib3').setLevel(logging.WARNING)
+logging.getLogger('requests').setLevel(logging.WARNING)
+logging.getLogger('httpx').setLevel(logging.WARNING)
+
+# Get our application logger
+logger = logging.getLogger(__name__)
+
+# Add the sensitive data filter
+sensitive_filter = SensitiveDataFilter()
+logger.addFilter(sensitive_filter)
 
 # Load environment variables from .env file if it exists (for local development)
 load_dotenv()
@@ -28,6 +68,7 @@ required_vars = {
 
 missing_vars = [var for var, value in required_vars.items() if not value]
 if missing_vars:
+    logger.error(f"Missing required environment variables: {', '.join(missing_vars)}")
     raise ValueError(f"Missing required environment variables: {', '.join(missing_vars)}")
 
 class WeatherTracker:
@@ -35,6 +76,7 @@ class WeatherTracker:
         # Weather API setup
         self.api_key = WEATHER_API_KEY
         if not self.api_key:
+            logger.error("WEATHER_API_KEY not found in environment variables")
             raise ValueError("WEATHER_API_KEY not found in environment variables")
         
         self.base_url = "http://api.weatherapi.com/v1"
@@ -50,6 +92,7 @@ class WeatherTracker:
         self.supabase_password = SUPABASE_USER_PASSWORD
         
         if not all([self.supabase_url, self.supabase_key, self.supabase_email, self.supabase_password]):
+            logger.error("Missing Supabase credentials in environment variables")
             raise ValueError("Missing Supabase credentials in environment variables")
         
         self.supabase: Client = create_client(self.supabase_url, self.supabase_key)
@@ -62,10 +105,10 @@ class WeatherTracker:
                 "email": self.supabase_email,
                 "password": self.supabase_password
             })
-            print("Successfully authenticated with Supabase")
+            logger.info("Successfully authenticated with Supabase")
             return response.user.id
         except Exception as e:
-            print(f"Error signing in to Supabase: {e}")
+            logger.error(f"Error signing in to Supabase: {str(e)}")
             raise
 
     def _get_user_id(self):
@@ -74,7 +117,7 @@ class WeatherTracker:
             user = self.supabase.auth.get_user()
             return user.user.id
         except Exception as e:
-            print(f"Error getting user ID: {e}")
+            logger.error(f"Error getting user ID: {str(e)}")
             raise
 
     def check_existing_data(self, date):
@@ -88,7 +131,7 @@ class WeatherTracker:
             
             return len(result.data) > 0
         except Exception as e:
-            print(f"Error checking existing data: {e}")
+            logger.error("Error checking existing data")
             return False
 
     def get_historical_weather(self, date):
@@ -107,7 +150,7 @@ class WeatherTracker:
             response.raise_for_status()
             return response.json()
         except requests.exceptions.RequestException as e:
-            print(f"Error fetching historical weather data: {e}")
+            logger.error(f"Error fetching historical weather data: {str(e)}")
             return None
 
     def analyze_weather_periods(self, weather_data):
@@ -164,12 +207,12 @@ class WeatherTracker:
         try:
             # Check if data already exists for this date and user
             if self.check_existing_data(date):
-                print(f"Weather data for {date.strftime('%Y-%m-%d')} already exists. Skipping insertion.")
+                logger.info(f"Weather data for {date.strftime('%Y-%m-%d')} already exists. Skipping insertion.")
                 return
 
-            print("Starting data insertion...")
+            logger.info("Starting data insertion...")
             for period, data in period_averages.items():
-                print(f"Processing {period} data...")
+                logger.info(f"Processing {period} data...")
                 weather_record = {
                     'date': date.strftime('%Y-%m-%d'),
                     'location': f"{self.city}, {self.country}",
@@ -182,31 +225,31 @@ class WeatherTracker:
                 }
                 
                 # Insert data into Supabase
-                print(f"Inserting {period} data into Supabase...")
+                logger.info(f"Inserting {period} data into Supabase...")
                 result = self.supabase.table('weather_data').insert(weather_record).execute()
                 
                 if hasattr(result, 'error') and result.error:
-                    print(f"Error storing {period} data: {result.error}")
+                    logger.error("Error storing data")
                 else:
-                    print(f"Successfully stored {period} data")
+                    logger.info(f"Successfully stored {period} data")
                     
         except Exception as e:
-            print(f"Error storing weather data: {e}")
+            logger.error("Error storing weather data")
         finally:
-            print("Data storage process completed.")
+            logger.info("Data storage process completed.")
 
     def print_weather_report(self, date, period_averages):
         """Print a formatted weather report."""
-        print(f"\nWeather Report for Newcastle, AU - {date.strftime('%Y-%m-%d')}")
-        print("=" * 50)
+        logger.info(f"\nWeather Report for Newcastle, AU - {date.strftime('%Y-%m-%d')}")
+        logger.info("=" * 50)
 
         for period, data in period_averages.items():
-            print(f"\n{period.capitalize()}:")
-            print(f"Temperature: {data['avg_temp']:.1f}°C")
-            print(f"Feels like: {data['avg_feels_like']:.1f}°C")
-            print(f"Humidity: {data['avg_humidity']:.1f}%")
-            print(f"Wind Speed: {data['avg_wind_speed']:.1f} km/h")
-            print(f"Weather: {data['weather_condition']}")
+            logger.info(f"\n{period.capitalize()}:")
+            logger.info(f"Temperature: {data['avg_temp']:.1f}°C")
+            logger.info(f"Feels like: {data['avg_feels_like']:.1f}°C")
+            logger.info(f"Humidity: {data['avg_humidity']:.1f}%")
+            logger.info(f"Wind Speed: {data['avg_wind_speed']:.1f} km/h")
+            logger.info(f"Weather: {data['weather_condition']}")
 
     def cleanup(self):
         """Clean up resources and close connections."""
@@ -214,9 +257,9 @@ class WeatherTracker:
             if hasattr(self, 'supabase'):
                 # Sign out from Supabase
                 self.supabase.auth.sign_out()
-                print("Successfully signed out from Supabase")
+                logger.info("Successfully signed out from Supabase")
         except Exception as e:
-            print(f"Error during cleanup: {e}")
+            logger.error(f"Error during cleanup: {str(e)}")
 
 def main():
     tracker = None
@@ -225,42 +268,42 @@ def main():
         yesterday = datetime.now() - timedelta(days=1)
         
         # Initialize weather tracker
-        print("Initializing WeatherTracker...")
+        logger.info("Initializing WeatherTracker...")
         tracker = WeatherTracker()
         
         # Get historical weather data
-        print("Fetching historical weather data...")
+        logger.info("Fetching historical weather data...")
         weather_data = tracker.get_historical_weather(yesterday)
         if not weather_data:
-            print("Failed to fetch weather data")
+            logger.error("Failed to fetch weather data")
             return
 
         # Analyze weather periods
-        print("Analyzing weather periods...")
+        logger.info("Analyzing weather periods...")
         periods = tracker.analyze_weather_periods(weather_data)
         if not periods:
-            print("Failed to analyze weather periods")
+            logger.error("Failed to analyze weather periods")
             return
 
         # Calculate averages
-        print("Calculating period averages...")
+        logger.info("Calculating period averages...")
         period_averages = tracker.calculate_period_averages(periods)
         
         # Print report
         tracker.print_weather_report(yesterday, period_averages)
         
         # Store data in Supabase
-        print("Storing data in Supabase...")
+        logger.info("Storing data in Supabase...")
         tracker.store_weather_data(yesterday, period_averages)
-        print("Script execution completed successfully.")
+        logger.info("Script execution completed successfully.")
 
     except Exception as e:
-        print(f"An error occurred: {e}")
+        logger.error(f"An error occurred: {str(e)}")
     finally:
         if tracker:
-            print("Cleaning up resources...")
+            logger.info("Cleaning up resources...")
             tracker.cleanup()
-        print("Script finished running.")
+        logger.info("Script finished running.")
 
 if __name__ == "__main__":
     main() 
