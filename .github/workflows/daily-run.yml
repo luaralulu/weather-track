@@ -2,7 +2,7 @@ name: Daily Weather Data Collection
 
 on:
   schedule:
-    # Runs at 10:15 AM AEST (00:15 UTC) every day
+    # Runs at 2:10 AM AEST (16:10 UTC) every day
     - cron: "10 16 * * *"
   workflow_dispatch: # Allows manual triggering
 
