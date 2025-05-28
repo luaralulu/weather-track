@@ -8,6 +8,7 @@ import json
 from supabase import create_client, Client
 import logging
 import re
+import pytz
 
 class SensitiveDataFilter(logging.Filter):
     """Filter to remove sensitive information from log records."""
@@ -261,40 +262,99 @@ class WeatherTracker:
         except Exception as e:
             logger.error(f"Error during cleanup: {str(e)}")
 
+    def get_last_stored_date(self):
+        """Get the most recent date for which weather data exists in the database."""
+        try:
+            result = self.supabase.table('weather_data')\
+                .select('date')\
+                .eq('user_id', self.user_id)\
+                .order('date', desc=True)\
+                .limit(1)\
+                .execute()
+            
+            if result.data:
+                return datetime.strptime(result.data[0]['date'], '%Y-%m-%d').replace(tzinfo=pytz.timezone('Australia/Sydney'))
+            return None
+        except Exception as e:
+            logger.error(f"Error getting last stored date: {str(e)}")
+            return None
+
+    def process_date(self, date):
+        """Process weather data for a specific date."""
+        try:
+            # Check if data already exists
+            if self.check_existing_data(date):
+                logger.info(f"Weather data for {date.strftime('%Y-%m-%d')} already exists. Skipping.")
+                return True
+
+            # Get historical weather data
+            logger.info(f"Fetching historical weather data for {date.strftime('%Y-%m-%d')}...")
+            weather_data = self.get_historical_weather(date)
+            if not weather_data:
+                logger.error(f"Failed to fetch weather data for {date.strftime('%Y-%m-%d')}")
+                return False
+
+            # Analyze weather periods
+            logger.info("Analyzing weather periods...")
+            periods = self.analyze_weather_periods(weather_data)
+            if not periods:
+                logger.error("Failed to analyze weather periods")
+                return False
+
+            # Calculate averages
+            logger.info("Calculating period averages...")
+            period_averages = self.calculate_period_averages(periods)
+            
+            # Print report
+            self.print_weather_report(date, period_averages)
+            
+            # Store data in Supabase
+            logger.info("Storing data in Supabase...")
+            self.store_weather_data(date, period_averages)
+            return True
+
+        except Exception as e:
+            logger.error(f"Error processing date {date.strftime('%Y-%m-%d')}: {str(e)}")
+            return False
+
 def main():
     tracker = None
     try:
-        # Get yesterday's date
-        yesterday = datetime.now() - timedelta(days=1)
+        # Set AEST timezone
+        aest = pytz.timezone('Australia/Sydney')
+        
+        # Get current time in AEST
+        current_time_aest = datetime.now(aest)
+        
+        # Get yesterday's date in AEST
+        yesterday = current_time_aest - timedelta(days=1)
         
         # Initialize weather tracker
         logger.info("Initializing WeatherTracker...")
         tracker = WeatherTracker()
         
-        # Get historical weather data
-        logger.info("Fetching historical weather data...")
-        weather_data = tracker.get_historical_weather(yesterday)
-        if not weather_data:
-            logger.error("Failed to fetch weather data")
-            return
-
-        # Analyze weather periods
-        logger.info("Analyzing weather periods...")
-        periods = tracker.analyze_weather_periods(weather_data)
-        if not periods:
-            logger.error("Failed to analyze weather periods")
-            return
-
-        # Calculate averages
-        logger.info("Calculating period averages...")
-        period_averages = tracker.calculate_period_averages(periods)
+        # Get the last stored date
+        last_stored_date = tracker.get_last_stored_date()
         
-        # Print report
-        tracker.print_weather_report(yesterday, period_averages)
+        if last_stored_date is None:
+            # If no data exists, start from yesterday
+            start_date = yesterday
+        else:
+            # Start from the day after the last stored date
+            start_date = last_stored_date + timedelta(days=1)
         
-        # Store data in Supabase
-        logger.info("Storing data in Supabase...")
-        tracker.store_weather_data(yesterday, period_averages)
+        # Process all missing dates up to yesterday
+        current_date = start_date
+        while current_date <= yesterday:
+            logger.info(f"\nProcessing date: {current_date.strftime('%Y-%m-%d')}")
+            success = tracker.process_date(current_date)
+            
+            if not success:
+                logger.error(f"Failed to process date {current_date.strftime('%Y-%m-%d')}")
+                # Continue with next date even if current one fails
+                
+            current_date += timedelta(days=1)
+        
         logger.info("Script execution completed successfully.")
 
     except Exception as e:
